@@ -37,6 +37,7 @@
         .error { margin: 12px 16px; background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.3); color: #fecaca; padding: 10px; border-radius: 8px; }
         @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .messages-box { height: 380px; } }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="navbar">
@@ -119,5 +120,6 @@
             box.scrollTop = box.scrollHeight;
         }
     </script>
+    @include('partials.pwa-script')
 </body>
 </html>

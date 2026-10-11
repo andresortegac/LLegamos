@@ -20,6 +20,7 @@
         .btn-reject { background: #ef4444; color: white; border: none; padding: 10px 14px; border-radius: 8px; cursor: pointer; }
         textarea { width: 100%; min-height: 80px; border-radius: 8px; border: 1px solid #374151; background: rgba(255,255,255,0.05); color: #fff; padding: 8px; margin-top: 6px; }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="container">
@@ -41,7 +42,7 @@
             <div class="property"><strong>Correo:</strong> {{ $profile->user->email }}</div>
             <div class="property"><strong>Documento:</strong> {{ $profile->document_number }}</div>
             <div class="property"><strong>Licencia:</strong> {{ $profile->license_number }}</div>
-            <div class="property"><strong>Vehiculo:</strong> {{ strtoupper($profile->vehicle_type) }} {{ $profile->vehicle_model_year ? '(' . $profile->vehicle_model_year . ')' : '' }}</div>
+            <div class="property"><strong>Vigencia licencia:</strong> {{ optional($profile->license_expires_at)->format('d/m/Y') }}</div><div class="property"><strong>Vehículo:</strong> {{ $profile->vehicle_make }} {{ $profile->vehicle_model }} - {{ $profile->vehicle_color }} / {{ $profile->passenger_capacity }} pasajeros</div><div class="property"><strong>Vehiculo:</strong> {{ strtoupper($profile->vehicle_type) }} {{ $profile->vehicle_model_year ? '(' . $profile->vehicle_model_year . ')' : '' }}</div>
             <div class="property"><strong>Placa:</strong> {{ $profile->vehicle_plate }} ({{ $profile->plate_type }})</div>
             <div class="property"><strong>Cinturones:</strong> {{ $profile->has_seatbelts ? 'Sí' : 'No' }}</div>
             <div class="property"><strong>4 puertas:</strong> {{ $profile->has_four_doors ? 'Sí' : 'No' }}</div>
@@ -50,22 +51,33 @@
         </div>
 
         <div class="card" style="margin-top: 16px;">
+            <div class="section-title">Comparacion de identidad</div>
+            <p style="margin-bottom:12px;color:#cbd5e1">Compara la selfie tomada en tiempo real con la fotografia y los datos de la cedula.</p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:22px">
+                <div><strong>Selfie en tiempo real</strong><object data="{{ route('driver-profile.document', [$profile->id, 'profile']) }}" style="display:block;width:100%;height:380px;margin-top:8px;background:#fff;border-radius:8px"></object></div>
+                <div><strong>Documento de identidad</strong><object data="{{ route('driver-profile.document', [$profile->id, 'id-card']) }}" style="display:block;width:100%;height:380px;margin-top:8px;background:#fff;border-radius:8px"></object></div>
+            </div>
             <div class="section-title">Documentos subidos</div>
             <div class="doc-links">
                 @if($profile->profile_photo_path)
-                    <a href="{{ asset('storage/' . $profile->profile_photo_path) }}" target="_blank">Foto de perfil</a>
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'profile']) }}" target="_blank">Foto de perfil</a>
                 @endif
                 @if($profile->license_document_path)
-                    <a href="{{ asset('storage/' . $profile->license_document_path) }}" target="_blank">Licencia (documento)</a>
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'license']) }}" target="_blank">Licencia (documento)</a>
                 @endif
                 @if($profile->id_card_document_path)
-                    <a href="{{ asset('storage/' . $profile->id_card_document_path) }}" target="_blank">Cédula / ID</a>
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'id-card']) }}" target="_blank">Cédula / ID</a>
                 @endif
                 @if($profile->property_card_path)
-                    <a href="{{ asset('storage/' . $profile->property_card_path) }}" target="_blank">Tarjeta de propiedad</a>
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'property-card']) }}" target="_blank">Tarjeta de propiedad</a>
                 @endif
-                @if($profile->soat_document_path)
-                    <a href="{{ asset('storage/' . $profile->soat_document_path) }}" target="_blank">SOAT</a>
+                @if($profile->technical_review_path)
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'technical-review']) }}" target="_blank">Revisión técnico-mecánica</a>
+                @endif
+                @if($profile->owner_authorization_path)
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'owner-authorization']) }}" target="_blank">Autorización del propietario</a>
+                @endif                @if($profile->soat_document_path)
+                    <a href="{{ route('driver-profile.document', [$profile->id, 'soat']) }}" target="_blank">SOAT</a>
                 @endif
             </div>
         </div>
@@ -74,6 +86,11 @@
             <div class="section-title">Acciones de aprobación</div>
             <div class="actions">
                 <form method="POST" action="{{ route('driver-profile.approve', $profile->id) }}">
+                    @csrf
+                    <p style="margin-bottom:8px"><strong>Lista obligatoria de validación:</strong></p>
+                    @foreach(['identity_verified'=>'Identidad coincide','license_verified'=>'Licencia vigente y válida','soat_verified'=>'SOAT vigente','property_verified'=>'Propiedad/autorización válida','background_verified'=>'Antecedentes aprobados','vehicle_inspected'=>'Vehículo inspeccionado','photo_verified'=>'Foto clara y actual','liveness_verified'=>'Desafio de presencia completado','policies_verified'=>'Políticas aceptadas'] as $key=>$label)
+                        <label style="display:block;margin:7px 0"><input type="checkbox" name="{{ $key }}" value="1" required> {{ $label }}</label>
+                    @endforeach
                     @csrf
                     <button type="submit" class="btn-approve">Aprobar conductor</button>
                 </form>
@@ -85,5 +102,6 @@
             </div>
         </div>
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

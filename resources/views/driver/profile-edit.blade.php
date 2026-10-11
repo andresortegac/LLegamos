@@ -176,12 +176,19 @@
             margin-top: 8px;
         }
 
+        .camera-group { grid-column: 1 / -1; }
+        .camera-frame { width: min(100%, 520px); aspect-ratio: 4/3; background:#020617; border:2px dashed #475569; border-radius:12px; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+        .camera-frame video, .camera-frame img { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); }
+        .camera-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+        .camera-btn { padding:10px 14px; border:0; border-radius:8px; background:#0ea5e9; color:#fff; font-weight:700; cursor:pointer; }
+        .camera-btn:disabled { opacity:.45; cursor:not-allowed; }
         @media (max-width: 900px) {
             .grid {
                 grid-template-columns: 1fr;
             }
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="navbar">
@@ -238,9 +245,20 @@
                         <input type="text" name="license_number" id="license_number" value="{{ old('license_number', $profile?->license_number ?? '') }}" required>
                     </div>
 
-                    <div class="group">
-                        <label for="profile_photo">Foto de perfil clara <span class="required">*</span></label>
-                        <input type="file" name="profile_photo" id="profile_photo" accept="image/*">
+                    <div class="group camera-group">
+                        <label>Selfie en tiempo real <span class="required">*</span></label>
+                        <div class="camera-frame">
+                            <video id="selfie-video" autoplay playsinline muted></video>
+                            <canvas id="selfie-canvas" hidden></canvas>
+                            <img id="selfie-preview" alt="Vista previa de la selfie" hidden>
+                        </div>
+                        <input type="hidden" name="profile_photo_capture" id="profile_photo_capture"><input type="hidden" name="liveness_token" id="liveness_token">
+                        <div class="camera-actions">
+                            <button type="button" class="camera-btn" id="start-camera">Activar camara</button>
+                            <button type="button" class="camera-btn" id="take-selfie" disabled>Tomar foto</button>
+                            <button type="button" class="camera-btn" id="retry-selfie" hidden>Repetir</button>
+                        </div>
+                        <p class="hint" id="camera-status">Permite el acceso a la camara. Mira de frente, sin gafas oscuras ni gorra y con buena iluminacion.</p>
                     </div>
                 </div>
 
@@ -300,10 +318,19 @@
                     </div>
                 </div>
 
+                <div class="section-title">Identificación del vehículo</div>
+                <div class="grid">
+                    <div class="group"><label>Marca <span class="required">*</span></label><input name="vehicle_make" value="{{ old('vehicle_make', $profile?->vehicle_make) }}" required></div>
+                    <div class="group"><label>Línea / modelo comercial <span class="required">*</span></label><input name="vehicle_model" value="{{ old('vehicle_model', $profile?->vehicle_model) }}" required></div>
+                    <div class="group"><label>Color <span class="required">*</span></label><input name="vehicle_color" value="{{ old('vehicle_color', $profile?->vehicle_color) }}" required></div>
+                    <div class="group"><label>Capacidad de pasajeros <span class="required">*</span></label><input type="number" min="1" max="8" name="passenger_capacity" value="{{ old('passenger_capacity', $profile?->passenger_capacity) }}" required></div>
+                    <div class="group"><label>¿El vehículo está a tu nombre?</label><select name="is_vehicle_owner" required><option value="1">Sí</option><option value="0" {{ old('is_vehicle_owner', $profile?->is_vehicle_owner) === '0' ? 'selected' : '' }}>No</option></select></div>
+                    <div class="group"><label>Autorización del propietario (si no es tuyo)</label><input type="file" name="owner_authorization_document" accept=".pdf,image/*"></div>
+                </div>
                 <div class="section-title">Documentacion obligatoria</div>
                 <div class="grid">
                     <div class="group">
-                        <label for="license_document">Licencia vigente <span class="required">*</span></label>
+                        <label for="license_document">Licencia vigente <span class="required">*</span></label><input type="date" name="license_expires_at" value="{{ old('license_expires_at', optional($profile?->license_expires_at)->format('Y-m-d')) }}" required>
                         <input type="file" name="license_document" id="license_document" accept=".pdf,image/*">
                     </div>
 
@@ -318,27 +345,34 @@
                     </div>
 
                     <div class="group">
-                        <label for="soat_document">SOAT vigente <span class="required">*</span></label>
+                        <label for="soat_document">SOAT vigente <span class="required">*</span></label><input type="date" name="soat_expires_at" value="{{ old('soat_expires_at', optional($profile?->soat_expires_at)->format('Y-m-d')) }}" required>
                         <input type="file" name="soat_document" id="soat_document" accept=".pdf,image/*">
                     </div>
                 </div>
 
+                <div class="grid">
+                    <div class="group"><label>Revisión técnico-mecánica vigente <span class="required">*</span></label><input type="date" name="technical_review_expires_at" value="{{ old('technical_review_expires_at', optional($profile?->technical_review_expires_at)->format('Y-m-d')) }}" required><input type="file" name="technical_review_document" accept=".pdf,image/*"></div>
+                </div>
+                <div class="section-title">Consentimientos y seguridad</div>
+                <div class="group"><label><input type="checkbox" name="background_check_consent" value="1" required> Autorizo la consulta de antecedentes judiciales y de conducción.</label></div>
+                <div class="group"><label><input type="checkbox" name="training_completed" value="1" required> Confirmo que completé la capacitación de seguridad vial y atención al usuario.</label></div>
+                <div class="group"><label><input type="checkbox" name="policies_accepted" value="1" required> Acepto las políticas de seguridad, cero tolerancia al alcohol y drogas, no discriminación, privacidad y normas de la comunidad.</label></div>
                 @if($profile)
                     <div class="doc-links">
                         @if($profile->profile_photo_path)
-                            <a href="{{ asset('storage/' . $profile->profile_photo_path) }}" target="_blank">Ver foto de perfil</a>
+                            <a href="{{ route('driver-profile.document', [$profile->id, 'profile']) }}" target="_blank">Ver foto de perfil</a>
                         @endif
                         @if($profile->license_document_path)
-                            <a href="{{ asset('storage/' . $profile->license_document_path) }}" target="_blank">Ver licencia</a>
+                            <a href="{{ route('driver-profile.document', [$profile->id, 'license']) }}" target="_blank">Ver licencia</a>
                         @endif
                         @if($profile->property_card_path)
-                            <a href="{{ asset('storage/' . $profile->property_card_path) }}" target="_blank">Ver tarjeta propiedad</a>
+                            <a href="{{ route('driver-profile.document', [$profile->id, 'property-card']) }}" target="_blank">Ver tarjeta propiedad</a>
                         @endif
                         @if($profile->id_card_document_path)
-                            <a href="{{ asset('storage/' . $profile->id_card_document_path) }}" target="_blank">Ver cédula / documento identidad</a>
+                            <a href="{{ route('driver-profile.document', [$profile->id, 'id-card']) }}" target="_blank">Ver cédula / documento identidad</a>
                         @endif
                         @if($profile->soat_document_path)
-                            <a href="{{ asset('storage/' . $profile->soat_document_path) }}" target="_blank">Ver SOAT</a>
+                            <a href="{{ route('driver-profile.document', [$profile->id, 'soat']) }}" target="_blank">Ver SOAT</a>
                         @endif
                     </div>
                 @endif
@@ -347,5 +381,55 @@
             </form>
         </div>
     </div>
+<script>
+(() => {
+    const video = document.getElementById('selfie-video');
+    const canvas = document.getElementById('selfie-canvas');
+    const preview = document.getElementById('selfie-preview');
+    const capture = document.getElementById('profile_photo_capture');
+    const livenessToken = document.getElementById('liveness_token');
+    const start = document.getElementById('start-camera');
+    const take = document.getElementById('take-selfie');
+    const retry = document.getElementById('retry-selfie');
+    const status = document.getElementById('camera-status');
+    let stream = null;
+
+    async function startCamera() {
+        try {
+            if (!navigator.mediaDevices?.getUserMedia) throw new Error('unsupported');
+            const challengeResponse = await fetch('{{ route('driver-profile.liveness') }}',{headers:{Accept:'application/json'}});
+            if(!challengeResponse.ok) throw new Error('challenge');
+            const challenge = await challengeResponse.json(); livenessToken.value=challenge.token;
+            stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:960}},audio:false});
+            video.srcObject = stream;
+            video.hidden = false; preview.hidden = true; take.disabled = false; retry.hidden = true;
+            status.textContent = 'Desafio: '+challenge.instruction+' Luego toma la foto antes de 3 minutos.';
+            take.disabled=true; setTimeout(()=>{if(stream)take.disabled=false;},2500);
+        } catch (error) {
+            status.textContent = 'No fue posible abrir la camara. Revisa el permiso del navegador y usa HTTPS o localhost.';
+        }
+    }
+
+    start.addEventListener('click', startCamera);
+    take.addEventListener('click', () => {
+        if (!stream || video.videoWidth < 320 || video.videoHeight < 320) return;
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        const context = canvas.getContext('2d');
+        context.translate(canvas.width, 0); context.scale(-1, 1); context.drawImage(video, 0, 0);
+        capture.value = canvas.toDataURL('image/jpeg', .88);
+        preview.src = capture.value; preview.hidden = false; video.hidden = true;
+        stream.getTracks().forEach(track => track.stop()); stream = null;
+        take.disabled = true; retry.hidden = false; status.textContent = 'Selfie capturada. Puedes repetirla si no esta clara.';
+    });
+    retry.addEventListener('click', () => { capture.value = ''; livenessToken.value=''; startCamera(); });
+    document.querySelector('form[action="{{ route('driver-profile.update') }}"]').addEventListener('submit', event => {
+        if (!capture.value && !@json((bool) $profile?->profile_photo_path)) {
+            event.preventDefault(); status.textContent = 'Debes tomar la selfie antes de enviar el registro.'; start.scrollIntoView({behavior:'smooth',block:'center'});
+        }
+    });
+    window.addEventListener('beforeunload', () => stream?.getTracks().forEach(track => track.stop()));
+})();
+</script>
+    @include('partials.pwa-script')
 </body>
 </html>

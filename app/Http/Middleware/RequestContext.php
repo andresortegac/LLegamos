@@ -1,0 +1,3 @@
+<?php
+namespace App\Http\Middleware;use Closure;use Illuminate\Http\Request;use Illuminate\Support\Facades\Log;use Illuminate\Support\Str;use Symfony\Component\HttpFoundation\Response;
+class RequestContext{public function handle(Request $request,Closure $next):Response{$incoming=(string)$request->header('X-Request-ID');$id=preg_match('/^[A-Za-z0-9._-]{8,100}$/',$incoming)?$incoming:(string)Str::uuid();Log::withContext(['request_id'=>$id,'user_id'=>$request->user()?->id,'route'=>$request->route()?->getName()]);$response=$next($request);$response->headers->set('X-Request-ID',$id);return $response;}}

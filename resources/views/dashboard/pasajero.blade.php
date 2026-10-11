@@ -138,12 +138,15 @@
             margin-bottom: 20px;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="container">
         <!-- Navbar -->
         <div class="navbar">
             <h3>🚕 Llegamos - Panel de Pasajero</h3>
+            <a href="{{ route('notifications.index') }}" style="color:#7dd3fc;">Notificaciones</a>
+            <a href="{{ route('safety.contacts') }}" style="color:#7dd3fc;">Contactos SOS</a>
             <form method="POST" action="{{ route('logout') }}" style="display: inline;">
                 @csrf
                 <button type="submit" class="logout-btn">Cerrar sesión</button>
@@ -197,5 +200,6 @@
             <p>No tienes viajes registrados aún</p>
         </div>
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

@@ -1,0 +1,7 @@
+<?php
+namespace Tests\Feature;use App\Models\SupportMessage;use App\Models\SupportTicket;use App\Models\User;use Illuminate\Foundation\Testing\RefreshDatabase;use Tests\TestCase;
+class SupportPrivacyTest extends TestCase{use RefreshDatabase;
+ public function test_user_opens_ticket_and_cannot_reply_to_another_users_ticket():void{$a=User::factory()->create(['email_verified_at'=>now()]);$b=User::factory()->create(['email_verified_at'=>now()]);$this->actingAs($a)->post(route('support.store'),['category'=>'payment','subject'=>'Cobro pendiente','message'=>'Necesito revisar este cobro'])->assertRedirect();$ticket=SupportTicket::first();$this->assertDatabaseHas('support_messages',['ticket_id'=>$ticket->id,'user_id'=>$a->id]);$this->actingAs($b)->post(route('support.reply',$ticket),['message'=>'No autorizado'])->assertForbidden();}
+ public function test_user_can_export_data_and_request_deletion():void{$u=User::factory()->create(['email_verified_at'=>now()]);$this->actingAs($u)->get(route('privacy.export'))->assertOk()->assertDownload('llegamos-datos-'.$u->id.'.json');$this->actingAs($u)->post(route('privacy.request'),['type'=>'deletion','details'=>'Quiero eliminar mi cuenta'])->assertRedirect();$this->assertDatabaseHas('privacy_requests',['user_id'=>$u->id,'type'=>'deletion','status'=>'pending']);}
+ public function test_only_admin_can_manage_all_privacy_requests():void{$u=User::factory()->create(['email_verified_at'=>now(),'role'=>'pasajero']);$this->actingAs($u)->get(route('admin.privacy'))->assertForbidden();}
+}

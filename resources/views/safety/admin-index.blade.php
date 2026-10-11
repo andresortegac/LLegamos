@@ -1,0 +1,3 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Incidentes</title><style>body{font-family:Segoe UI;background:#0f172a;color:white;padding:24px}.card{background:#1e293b;padding:16px;margin:10px;border-radius:10px}a{color:#7dd3fc}</style>    @include('partials.pwa-head')
+</head><body><a href="{{ route('dashboard.admin') }}">Volver</a><h1>Incidentes</h1>@foreach($incidents as $i)<div class="card"><b>{{ strtoupper($i->severity) }} — {{ $i->type }}</b> | Viaje #{{ $i->trip_id }} | {{ $i->status }} <a href="{{ route('admin.incidents.show',$i->id) }}">Gestionar</a></div>@endforeach{{ $incidents->links() }}    @include('partials.pwa-script')
+</body></html>

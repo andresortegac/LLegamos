@@ -49,6 +49,7 @@
             margin-bottom: 8px;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="header">
@@ -79,5 +80,6 @@
             </ul>
         </div>
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

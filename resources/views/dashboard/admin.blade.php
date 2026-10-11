@@ -179,11 +179,17 @@
             font-weight: bold;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="container">
         <div class="navbar">
             <h3>Llegamos - Panel de Administrador</h3>
+            <a href="{{ route('admin.incidents.index') }}" style="color:#fca5a5;margin-right:12px;">Incidentes y SOS</a>
+            <a href="{{ route('admin.payouts.index') }}" style="color:#7dd3fc;margin-right:12px;">Retiros</a>
+            <a href="{{ route('admin.users.index') }}" style="color:#86efac;margin-right:12px;">Usuarios</a>
+            <a href="{{ route('admin.audit.index') }}" style="color:#c4b5fd;margin-right:12px;">Auditoría</a>
+            <a href="{{ route('admin.risk.index') }}" style="color:#fbbf24;margin-right:12px;">Riesgo y operación</a>
             <form method="POST" action="{{ route('logout') }}">
                 @csrf
                 <button type="submit" class="logout-btn">Cerrar sesion</button>
@@ -244,19 +250,19 @@
                                 </td>
                                 <td class="doc-links">
                                     @if($profile->profile_photo_path)
-                                        <a href="{{ asset('storage/' . $profile->profile_photo_path) }}" target="_blank">Foto de perfil</a>
+                                        <a href="{{ route('driver-profile.document', [$profile->id, 'profile']) }}" target="_blank">Foto de perfil</a>
                                     @endif
                                     @if($profile->license_document_path)
-                                        <a href="{{ asset('storage/' . $profile->license_document_path) }}" target="_blank">Licencia</a>
+                                        <a href="{{ route('driver-profile.document', [$profile->id, 'license']) }}" target="_blank">Licencia</a>
                                     @endif
                                     @if($profile->property_card_path)
-                                        <a href="{{ asset('storage/' . $profile->property_card_path) }}" target="_blank">Tarjeta propiedad</a>
+                                        <a href="{{ route('driver-profile.document', [$profile->id, 'property-card']) }}" target="_blank">Tarjeta propiedad</a>
                                     @endif
                                     @if($profile->id_card_document_path)
-                                        <a href="{{ asset('storage/' . $profile->id_card_document_path) }}" target="_blank">Cédula / documento identidad</a>
+                                        <a href="{{ route('driver-profile.document', [$profile->id, 'id-card']) }}" target="_blank">Cédula / documento identidad</a>
                                     @endif
                                     @if($profile->soat_document_path)
-                                        <a href="{{ asset('storage/' . $profile->soat_document_path) }}" target="_blank">SOAT</a>
+                                        <a href="{{ route('driver-profile.document', [$profile->id, 'soat']) }}" target="_blank">SOAT</a>
                                     @endif
                                 </td>
                                 <td class="actions">
@@ -282,5 +288,6 @@
             @endif
         </div>
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

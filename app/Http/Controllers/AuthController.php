@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Models\User;
+use Illuminate\Auth\Events\Registered;
 
 class AuthController extends Controller
 {
@@ -30,8 +32,8 @@ class AuthController extends Controller
         $rules = [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|min:6|confirmed',
-            'role' => 'required|in:pasajero,conductor,admin',
+            'password' => 'required|string|min:8|confirmed',
+            'role' => 'required|in:pasajero,conductor',
         ];
 
         $messages = [
@@ -90,6 +92,10 @@ class AuthController extends Controller
             'is_identity_verified' => $passengerSecurityData['is_identity_verified'],
         ]);
 
+        event(new Registered($user));
+        Auth::login($user);
+        $request->session()->regenerate();
+
         Session::put('user', [
             'id' => $user->id,
             'name' => $user->name,
@@ -116,11 +122,21 @@ class AuthController extends Controller
             'password.required' => 'La contrasena es obligatoria.',
         ]);
 
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
+        if (!Auth::attempt($request->only('email', 'password'))) {
             return back()->with('error', 'Credenciales incorrectas')->withInput();
         }
+
+        $request->session()->regenerate();
+        $user = Auth::user();
+
+        if ($user->status !== 'active') {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+            return back()->with('error', 'Tu cuenta se encuentra suspendida. Contacta al soporte.')->withInput();
+        }
+
+        $user->forceFill(['last_login_at' => now()])->save();
 
         Session::put('user', [
             'id' => $user->id,
@@ -143,16 +159,19 @@ class AuthController extends Controller
         ]);
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
-        Session::forget('user');
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
         return redirect()->route('welcome');
     }
 
     private function storePassengerSecurityData(Request $request): array
     {
-        $frontPath = $request->file('id_document_front')->store('passengers/id/front', 'public');
-        $backPath = $request->file('id_document_back')->store('passengers/id/back', 'public');
+        $frontPath = $request->file('id_document_front')->store('passengers/id/front', config('filesystems.private'));
+        $backPath = $request->file('id_document_back')->store('passengers/id/back', config('filesystems.private'));
         $facePath = $this->storeBiometricFaceImage($request->input('face_biometric_capture'));
 
         return [
@@ -182,7 +201,7 @@ class AuthController extends Controller
         }
 
         $path = 'passengers/biometric/' . Str::uuid() . '.' . $extension;
-        Storage::disk('public')->put($path, $binaryImage);
+        Storage::disk(config('filesystems.private'))->put($path, $binaryImage);
 
         return $path;
     }

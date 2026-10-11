@@ -99,6 +99,7 @@
             color: #e2e8f0;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <nav class="navbar">
@@ -133,5 +134,6 @@
             <p>• Base para viajes y geolocalización</p>
         </div>
     </section>
+    @include('partials.pwa-script')
 </body>
 </html>

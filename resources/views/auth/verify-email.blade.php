@@ -1,0 +1,3 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Verificar correo</title>    @include('partials.pwa-head')
+</head><body style="font-family:Segoe UI;background:#0f172a;color:white;padding:40px"><div style="max-width:600px;margin:auto;background:#1e293b;padding:30px;border-radius:14px"><h1>Verifica tu correo</h1><p>Enviamos un enlace a {{ auth()->user()->email }}. Debes confirmarlo para usar la plataforma.</p>@if(session('status')==='verification-link-sent')<p>Enlace reenviado.</p>@endif<form method="POST" action="{{ route('verification.send') }}">@csrf<button>Reenviar enlace</button></form><form method="POST" action="{{ route('logout') }}">@csrf<button>Cerrar sesion</button></form></div>    @include('partials.pwa-script')
+</body></html>

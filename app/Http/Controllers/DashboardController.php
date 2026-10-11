@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use App\Models\User;
 use App\Models\DriverProfile;
 use App\Models\InternalMessage;
+use App\Models\Trip;
 
 class DashboardController extends Controller
 {
@@ -52,12 +53,19 @@ class DashboardController extends Controller
 
         $canOperate = $profile && $profile->verification_status === 'approved';
         $unreadMessagesCount = $this->getUnreadMessagesCount((int) $user['id']);
+        $activeTrip = Trip::where('driver_id', $user['id'])
+            ->whereIn('status', ['accepted', 'in_progress'])
+            ->latest()
+            ->first();
+        $completedTrips = Trip::where('driver_id', $user['id'])->where('status', 'completed')->count();
 
         return view('dashboard.conductor', [
             'user' => $user,
             'profile' => $profile,
             'canOperate' => $canOperate,
             'unreadMessagesCount' => $unreadMessagesCount,
+            'activeTrip' => $activeTrip,
+            'completedTrips' => $completedTrips,
         ]);
     }
 

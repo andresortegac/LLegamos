@@ -1,0 +1,7 @@
+<?php
+namespace Tests\Feature;use App\Models\User;use App\Services\LivenessService;use Illuminate\Foundation\Testing\RefreshDatabase;use Illuminate\Validation\ValidationException;use Tests\TestCase;
+class LivenessChallengeTest extends TestCase{use RefreshDatabase;
+ public function test_driver_receives_expiring_one_time_challenge():void{$driver=User::factory()->create(['role'=>'conductor','email_verified_at'=>now()]);$data=$this->actingAs($driver)->getJson(route('driver-profile.liveness'))->assertOk()->assertJsonStructure(['token','instruction','expires_at'])->json();$challenge=app(LivenessService::class)->consume($driver->id,$data['token']);$this->assertNotNull($challenge->consumed_at);$this->expectException(ValidationException::class);app(LivenessService::class)->consume($driver->id,$data['token']);}
+ public function test_passenger_cannot_request_driver_liveness_challenge():void{$passenger=User::factory()->create(['role'=>'pasajero','email_verified_at'=>now()]);$this->actingAs($passenger)->getJson(route('driver-profile.liveness'))->assertForbidden();}
+ public function test_challenge_cannot_be_used_by_another_driver():void{$a=User::factory()->create(['role'=>'conductor']);$b=User::factory()->create(['role'=>'conductor']);$data=app(LivenessService::class)->issue($a->id);$this->expectException(ValidationException::class);app(LivenessService::class)->consume($b->id,$data['token']);}
+}

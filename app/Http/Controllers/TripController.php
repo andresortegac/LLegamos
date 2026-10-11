@@ -6,12 +6,22 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Session;
 use App\Models\Trip;
 use App\Models\User;
+use App\Services\RoutePricingService;
+use App\Services\MonetizationService;
+use App\Services\FraudDetectionService;
+use App\Services\DispatchService;
+use App\Services\RealtimePublisher;
+use App\Models\TripOffer;
+use App\Models\UserNotification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\Rule;
 
 class TripController extends Controller
 {
+    public function __construct(private readonly RoutePricingService $pricing, private readonly MonetizationService $monetization, private readonly FraudDetectionService $fraud, private readonly DispatchService $dispatch, private readonly RealtimePublisher $realtime)
+    {
+    }
     // Mostrar formulario para solicitar viaje (Pasajero)
     public function createRequest()
     {
@@ -75,10 +85,10 @@ class TripController extends Controller
             'municipality' => ['required', Rule::in($municipalities)],
             'origin' => 'required|string|max:255',
             'destination' => 'required|string|max:255',
-            'origin_lat' => 'nullable|numeric|between:-90,90',
-            'origin_lng' => 'nullable|numeric|between:-180,180',
-            'destination_lat' => 'nullable|numeric|between:-90,90',
-            'destination_lng' => 'nullable|numeric|between:-180,180',
+            'origin_lat' => 'required|numeric|between:-90,90',
+            'origin_lng' => 'required|numeric|between:-180,180',
+            'destination_lat' => 'required|numeric|between:-90,90',
+            'destination_lng' => 'required|numeric|between:-180,180',
             'notes' => 'nullable|string|max:500',
         ], [
             'vehicle_type.required' => 'Debes seleccionar si deseas carro o moto.',
@@ -106,22 +116,18 @@ class TripController extends Controller
 
         $validated['passenger_id'] = $user['id'];
         $validated['status'] = 'pending';
+        $validated['pickup_pin'] = (string) random_int(1000, 9999);
         
-        // Calcular costo basado en distancia si tenemos coordenadas
-        if ($validated['origin_lat'] && $validated['origin_lng'] && $validated['destination_lat'] && $validated['destination_lng']) {
-            $distance = $this->calculateDistance(
-                $validated['origin_lat'],
-                $validated['origin_lng'],
-                $validated['destination_lat'],
-                $validated['destination_lng']
-            );
-            $validated['distance_km'] = round($distance, 2);
-            $validated['estimated_cost'] = round(($distance * 3) + 5, 2); // $3 por km + $5 base
-        } else {
-            $validated['estimated_cost'] = rand(10, 50); // Costo simulado sin coordenadas
-        }
+        $validated = array_merge($validated, $this->pricing->quote(
+            $validated['vehicle_type'],
+            (float) $validated['origin_lat'],
+            (float) $validated['origin_lng'],
+            (float) $validated['destination_lat'],
+            (float) $validated['destination_lng']
+        ));
 
         $trip = Trip::create($validated);
+        $this->dispatch->dispatch($trip);
 
         return redirect()->route('trip.show', $trip->id)->with('success', 'Viaje solicitado correctamente.');
     }
@@ -250,6 +256,64 @@ class TripController extends Controller
         return view('trip.show', ['user' => $user, 'trip' => $trip]);
     }
 
+    public function liveStatus(Request $request, int $id)
+    {
+        $trip = Trip::with('driver.driverProfile')->findOrFail($id);
+        $user = $request->user();
+
+        if ($trip->passenger_id !== $user->id && $trip->driver_id !== $user->id) {
+            abort(403);
+        }
+
+        $profile = $trip->driver?->driverProfile;
+        $locationAge = $profile?->location_updated_at
+            ? max(0, now()->diffInSeconds($profile->location_updated_at))
+            : null;
+        $locationIsFresh = $locationAge !== null && $locationAge <= 45 && (bool) $profile->is_online;
+        $targetIsDestination = $trip->status === 'in_progress';
+        $targetLat = $targetIsDestination ? $trip->destination_lat : $trip->origin_lat;
+        $targetLng = $targetIsDestination ? $trip->destination_lng : $trip->origin_lng;
+        $distanceToTarget = $locationIsFresh && $targetLat && $targetLng
+            ? round($this->calculateDistance((float) $profile->current_lat, (float) $profile->current_lng, (float) $targetLat, (float) $targetLng), 2)
+            : null;
+        $etaToTarget = $distanceToTarget !== null ? max(1, (int) ceil(($distanceToTarget / 25) * 60)) : null;
+
+        return response()->json([
+            'status' => $trip->status,
+            'driver' => $trip->driver ? [
+                'name' => $trip->driver->name,
+                'latitude' => $locationIsFresh ? (float) $profile->current_lat : null,
+                'longitude' => $locationIsFresh ? (float) $profile->current_lng : null,
+                'location_updated_at' => $locationIsFresh ? $profile->location_updated_at->toIso8601String() : null,
+                'location_age_seconds' => $locationAge,
+                'location_fresh' => $locationIsFresh,
+                'is_online' => (bool) $profile->is_online,
+                'accuracy' => $profile->location_accuracy_m !== null ? (float) $profile->location_accuracy_m : null,
+                'heading' => $profile->location_heading !== null ? (float) $profile->location_heading : null,
+                'speed' => $profile->location_speed_mps !== null ? (float) $profile->location_speed_mps : null,
+                'trip_stage' => $targetIsDestination ? 'to_destination' : 'to_pickup',
+                'target_label' => $targetIsDestination ? 'Destino' : 'Punto de recogida',
+                'distance_to_target_km' => $distanceToTarget,
+                'eta_to_target_minutes' => $etaToTarget,
+                'distance_to_pickup_km' => $targetIsDestination ? null : $distanceToTarget,
+                'eta_to_pickup_minutes' => $targetIsDestination ? null : $etaToTarget,
+                'vehicle' => [
+                    'type' => $trip->vehicle_type,
+                    'make' => $profile->vehicle_make,
+                    'model' => $profile->vehicle_model,
+                    'color' => $profile->vehicle_color,
+                    'plate' => $profile->vehicle_plate,
+                ],
+            ] : null,
+            'safety_alerts' => $trip->incidents()
+                ->where('status', 'open')
+                ->where('description', 'like', '[AUTOMATICA]%')
+                ->latest()
+                ->limit(3)
+                ->get(['id', 'severity', 'description', 'created_at']),
+            'updated_at' => $trip->updated_at->toIso8601String(),
+        ]);
+    }
     // Listar viajes pendientes (Conductor)
     public function listPending()
     {
@@ -267,7 +331,26 @@ class TripController extends Controller
             return $redirect;
         }
 
-        $trips = Trip::where('status', 'pending')->get();
+        $profile = User::find($user['id'])?->driverProfile;
+        if (!$profile?->is_online || !$profile->current_lat || !$profile->current_lng) {
+            return redirect()->route('dashboard.conductor')
+                ->with('error', 'Debes conectarte y compartir tu ubicacion para ver viajes cercanos.');
+        }
+
+        $this->dispatch->expireAndRedispatch();
+        $offers = TripOffer::with('trip')
+            ->where('driver_id', $user['id'])
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->orderBy('expires_at')
+            ->get();
+        $trips = $offers->map(function (TripOffer $offer) {
+            $trip = $offer->trip;
+            $trip->driver_distance_km = $offer->distance_km;
+            $trip->dispatch_offer_id = $offer->id;
+            $trip->dispatch_expires_at = $offer->expires_at;
+            return $trip;
+        });
 
         return view('trip.list-pending', ['user' => $user, 'trips' => $trips]);
     }
@@ -275,32 +358,24 @@ class TripController extends Controller
     // Aceptar viaje (Conductor)
     public function accept($id)
     {
-        if (!Session::has('user')) {
-            return redirect()->route('login');
-        }
-
         $user = Session::get('user');
+        abort_unless($user && $user['role'] === 'conductor', 403);
+        if ($redirect = $this->ensureApprovedDriver($user)) return $redirect;
+        $profile = User::find($user['id'])?->driverProfile;
+        abort_unless($profile?->is_online && $profile->location_updated_at?->greaterThan(now()->subSeconds(config('dispatch.location_fresh_seconds'))), 422, 'Debes estar conectado y compartir una ubicacion reciente.');
+        abort_if(Trip::where('driver_id',$user['id'])->whereIn('status',['accepted','in_progress'])->exists(),409,'Ya tienes un viaje activo.');
+        $offer = TripOffer::where('trip_id',$id)->where('driver_id',$user['id'])->where('status','pending')->latest()->firstOrFail();
+        $trip = $this->dispatch->accept($offer,(int)$user['id']);
+        return redirect()->route('trip.show',$trip->id)->with('success','Viaje aceptado.');
+    }
 
-        if ($user['role'] !== 'conductor') {
-            return redirect()->route('dashboard');
-        }
-
-        if ($redirect = $this->ensureApprovedDriver($user)) {
-            return $redirect;
-        }
-
-        $trip = Trip::find($id);
-
-        if (!$trip || $trip->status !== 'pending') {
-            return back()->with('error', 'Este viaje no está disponible.');
-        }
-
-        $trip->update([
-            'driver_id' => $user['id'],
-            'status' => 'accepted',
-        ]);
-
-        return redirect()->route('trip.show', $trip->id)->with('success', 'Viaje aceptado.');
+    public function rejectOffer(int $id)
+    {
+        $user=Session::get('user');
+        abort_unless($user && $user['role']==='conductor',403);
+        $offer=TripOffer::where('trip_id',$id)->where('driver_id',$user['id'])->where('status','pending')->latest()->firstOrFail();
+        $this->dispatch->reject($offer,(int)$user['id']);
+        return redirect()->route('trip.list-pending')->with('success','Oferta rechazada. Buscaremos otro conductor.');
     }
 
     // Iniciar viaje (Conductor)
@@ -316,18 +391,33 @@ class TripController extends Controller
             return $redirect;
         }
 
-        $trip = Trip::find($id);
+        $validated = request()->validate([
+            'pickup_pin' => 'required|digits:4',
+        ]);
 
-        if (!$trip || $trip->driver_id !== $user['id'] || $trip->status !== 'accepted') {
+        $trip = Trip::whereKey($id)
+            ->where('driver_id', $user['id'])
+            ->where('status', 'accepted')
+            ->first();
+
+        if (!$trip || !hash_equals((string) $trip->pickup_pin, (string) $validated['pickup_pin'])) {
+            return back()->withErrors(['pickup_pin' => 'El PIN de inicio no es correcto.']);
+        }
+
+        $started = Trip::whereKey($id)
+            ->where('driver_id', $user['id'])
+            ->where('status', 'accepted')
+            ->update([
+                'status' => 'in_progress',
+                'start_time' => now(),
+            ]);
+
+        if ($started !== 1) {
             return back()->with('error', 'No puedes iniciar este viaje.');
         }
 
-        $trip->update([
-            'status' => 'in_progress',
-            'start_time' => now(),
-        ]);
-
-        return redirect()->route('trip.show', $trip->id)->with('success', 'Viaje iniciado.');
+        $this->realtime->trip(Trip::findOrFail($id), 'trip.updated', ['status'=>'in_progress']);
+        return redirect()->route('trip.show', $id)->with('success', 'Viaje iniciado.');
     }
 
     // Completar viaje (Conductor)
@@ -343,21 +433,69 @@ class TripController extends Controller
             return $redirect;
         }
 
-        $trip = Trip::find($id);
+        $completed = Trip::whereKey($id)
+            ->where('driver_id', $user['id'])
+            ->where('status', 'in_progress')
+            ->update([
+                'status' => 'completed',
+                'end_time' => now(),
+                'final_cost' => \Illuminate\Support\Facades\DB::raw('estimated_cost'),
+            ]);
 
-        if (!$trip || $trip->driver_id !== $user['id'] || $trip->status !== 'in_progress') {
+        if ($completed !== 1) {
             return back()->with('error', 'No puedes completar este viaje.');
         }
 
-        $trip->update([
-            'status' => 'completed',
-            'end_time' => now(),
-            'final_cost' => $trip->estimated_cost,
-        ]);
-
-        return redirect()->route('trip.show', $trip->id)->with('success', 'Viaje completado.');
+        $trip = Trip::findOrFail($id);
+        $this->monetization->recordCompletedTrip($trip);
+        UserNotification::create(['user_id'=>$trip->passenger_id,'type'=>'trip_completed','title'=>'Viaje completado','message'=>'Tu viaje #'.$id.' finalizo. Puedes calificar y registrar el pago.','action_url'=>route('trip.show',$id)]);
+        $this->realtime->trip($trip, 'trip.updated', ['status'=>'completed']);
+        return redirect()->route('trip.show', $id)->with('success', 'Viaje completado.');
     }
 
+    public function cancel(Request $request, int $id)
+    {
+        $validated = $request->validate([
+            'reason' => 'required|string|min:5|max:500',
+        ]);
+
+        $user = Session::get('user');
+        $trip = Trip::findOrFail($id);
+        $isPassenger = $user['role'] === 'pasajero' && $trip->passenger_id === $user['id'];
+        $isDriver = $user['role'] === 'conductor' && $trip->driver_id === $user['id'];
+
+        if ((!$isPassenger && !$isDriver) || !in_array($trip->status, ['pending', 'accepted'], true)) {
+            abort(403, 'Este viaje no puede ser cancelado por tu usuario.');
+        }
+
+        $cancelled = Trip::whereKey($trip->id)
+            ->whereIn('status', ['pending', 'accepted'])
+            ->update([
+                'status' => 'cancelled',
+                'cancelled_by' => $user['role'],
+                'cancellation_reason' => trim($validated['reason']),
+                'cancelled_at' => now(),
+            ]);
+
+        if ($cancelled !== 1) {
+            return back()->with('error', 'El estado del viaje cambio antes de cancelarlo.');
+        }
+
+        $recipientId = $isPassenger ? $trip->driver_id : $trip->passenger_id;
+        if ($recipientId) {
+            UserNotification::create([
+                'user_id' => $recipientId,
+                'type' => 'trip_cancelled',
+                'title' => 'Viaje cancelado',
+                'message' => 'El viaje #' . $trip->id . ' fue cancelado.',
+                'action_url' => route('trip.show', $trip->id),
+            ]);
+        }
+
+        $trip->refresh();
+        $this->realtime->trip($trip, 'trip.updated', ['status'=>'cancelled']);
+        return redirect()->route('dashboard')->with('success', 'Viaje cancelado correctamente.');
+    }
     // Historial de viajes del usuario
     public function history()
     {

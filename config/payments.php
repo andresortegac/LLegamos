@@ -1,0 +1,2 @@
+<?php
+return ['wompi'=>['enabled'=>env('WOMPI_ENABLED',false),'environment'=>env('WOMPI_ENVIRONMENT','test'),'public_key'=>env('WOMPI_PUBLIC_KEY'),'integrity_secret'=>env('WOMPI_INTEGRITY_SECRET'),'events_secret'=>env('WOMPI_EVENTS_SECRET'),'private_key'=>env('WOMPI_PRIVATE_KEY'),'checkout_url'=>env('WOMPI_CHECKOUT_URL','https://checkout.wompi.co/p/'),'api_url'=>env('WOMPI_API_URL','https://sandbox.wompi.co/v1')]];

@@ -89,11 +89,16 @@
             margin: 0 8px;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="box">
         <h2>Ingresar a Llegamos</h2>
         <p>Escribe tus datos para continuar</p>
+
+        @if(session('success') || session('status'))
+            <div style="background:rgba(16,185,129,.2);color:#d1fae5;border:1px solid #10b981;padding:12px;border-radius:10px;margin-bottom:15px" role="status">{{ session('success', session('status')) }}</div>
+        @endif
 
         @if(session('error'))
             <div class="error">{{ session('error') }}</div>
@@ -122,7 +127,9 @@
         <div class="links">
             <a href="{{ route('welcome') }}">Inicio</a>
             <a href="{{ route('register') }}">Crear cuenta</a>
+            <a href="{{ route('password.request') }}">Olvide mi contrasena</a>
         </div>
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

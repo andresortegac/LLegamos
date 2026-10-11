@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recuperar contraseña</title>
+<style>body{font-family:Segoe UI,sans-serif;background:#0f172a;color:#fff;padding:40px}.box{max-width:500px;margin:auto;background:#1e293b;padding:30px;border-radius:14px}input,button{box-sizing:border-box;padding:12px;width:100%;border-radius:8px}input{border:1px solid #64748b;margin-top:8px}button{margin-top:14px;border:0;background:#38bdf8;font-weight:700;cursor:pointer}.success{background:#064e3b;color:#d1fae5;border:1px solid #10b981;padding:14px;border-radius:10px;margin:15px 0}.error{background:#7f1d1d;color:#fee2e2;padding:14px;border-radius:10px;margin:15px 0}a{color:#7dd3fc}</style>@include('partials.pwa-head')</head>
+<body><main class="box"><h1>Recuperar contraseña</h1><p>Escribe el correo de tu cuenta y te enviaremos un enlace seguro.</p>
+@if(session('success') || session('status'))<div class="success" role="status" aria-live="polite">{{ session('success', session('status')) }}</div>@endif
+@if($errors->any())<div class="error" role="alert">{{ $errors->first() }}</div>@endif
+<form method="POST" action="{{ route('password.email') }}">@csrf<label for="email">Correo electrónico</label><input id="email" type="email" name="email" value="{{ old('email') }}" required autocomplete="email"><button type="submit">Enviar enlace de recuperación</button></form><p><a href="{{ route('login') }}">Volver a iniciar sesión</a></p></main>@include('partials.pwa-script')</body></html>

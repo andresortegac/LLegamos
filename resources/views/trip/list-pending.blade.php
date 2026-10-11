@@ -217,6 +217,7 @@
             }
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="navbar">
@@ -228,7 +229,7 @@
         @if($trips->count() > 0)
             <div class="trips-list">
                 @foreach($trips as $trip)
-                    <div class="trip-card">
+                    <div class="trip-card" data-offer-expires="{{ $trip->dispatch_expires_at?->timestamp }}">
                         <div class="trip-info">
                             <!-- Ubicaciones -->
                             <div class="locations">
@@ -259,8 +260,17 @@
                                 </div>
 
                                 <div class="detail-item">
+                                    <span class="detail-label">Distancia para recoger</span>
+                                    <span class="detail-value">{{ number_format($trip->driver_distance_km, 2) }} km</span>
+                                </div>
+
+                                <div class="detail-item">
                                     <span class="detail-label">ID del viaje</span>
                                     <span class="detail-value">#{{ $trip->id }}</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-label">Tiempo para responder</span>
+                                    <span class="detail-value offer-countdown">--</span>
                                 </div>
 
                                 <div class="detail-item">
@@ -283,10 +293,10 @@
                                     ✓ Aceptar
                                 </button>
                             </form>
-
-                            <a href="{{ route('trip.show', $trip->id) }}" class="btn btn-view">
-                                Ver detalles
-                            </a>
+                            <form method="POST" action="{{ route('trip.offer.reject', $trip->id) }}" style="width:100%;margin-top:8px">
+                                @csrf
+                                <button type="submit" class="btn" style="background:#475569;color:white">Rechazar</button>
+                            </form>
                         </div>
                     </div>
                 @endforeach
@@ -300,5 +310,21 @@
             </div>
         @endif
     </div>
+    <script>
+    (() => {
+        const cards = [...document.querySelectorAll('[data-offer-expires]')];
+        const tick = () => { const now = Math.floor(Date.now()/1000); let expired=false; cards.forEach(card => { const remaining=Math.max(0,Number(card.dataset.offerExpires)-now); const output=card.querySelector('.offer-countdown'); if(output)output.textContent=remaining+' s'; if(remaining===0)expired=true; }); if(expired)location.reload(); };
+        tick(); setInterval(tick,1000);
+        const fallback = setTimeout(()=>location.reload(),cards.length?30000:10000);
+        const connect = () => {
+            if (!window.Echo) return setTimeout(connect, 250);
+            window.Echo.private('users.{{ (int) $user['id'] }}').listen('.realtime.update', event => {
+                if (event.type.startsWith('trip.offer')) { clearTimeout(fallback); location.reload(); }
+            });
+        };
+        connect();
+    })();
+    </script>
+    @include('partials.pwa-script')
 </body>
 </html>

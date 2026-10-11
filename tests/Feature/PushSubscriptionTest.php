@@ -1,0 +1,6 @@
+<?php
+namespace Tests\Feature;use App\Models\User;use Illuminate\Foundation\Testing\RefreshDatabase;use Tests\TestCase;
+class PushSubscriptionTest extends TestCase{use RefreshDatabase;
+ public function test_verified_user_can_subscribe_and_unsubscribe_device():void{$user=User::factory()->create(['email_verified_at'=>now()]);$data=['endpoint'=>'https://push.example.test/device/abc','keys'=>['p256dh'=>str_repeat('a',88),'auth'=>str_repeat('b',24)],'contentEncoding'=>'aes128gcm'];$this->actingAs($user)->postJson(route('push.store'),$data)->assertOk()->assertJson(['subscribed'=>true]);$this->assertDatabaseHas('push_subscriptions',['user_id'=>$user->id,'endpoint_hash'=>hash('sha256',$data['endpoint'])]);$this->actingAs($user)->deleteJson(route('push.destroy'),['endpoint'=>$data['endpoint']])->assertOk()->assertJson(['subscribed'=>false]);$this->assertDatabaseCount('push_subscriptions',0);}
+ public function test_guest_cannot_register_push_endpoint():void{$this->postJson(route('push.store'),['endpoint'=>'https://push.example.test/x','keys'=>['p256dh'=>'a','auth'=>'b']])->assertUnauthorized();}
+}

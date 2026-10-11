@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Llegamos Conductor</string>
+    <string name="title_activity_main">Llegamos Conductor</string>
+    <string name="package_name">co.llegamos.conductor</string>
+    <string name="custom_url_scheme">co.llegamos.conductor</string>
+    <string name="capacitor_background_geolocation_notification_channel_name">Ubicación de viajes</string>
+    <string name="capacitor_background_geolocation_notification_color">#0EA5E9</string>
+</resources>

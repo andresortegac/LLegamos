@@ -212,9 +212,10 @@
             cursor: pointer;
         }
 
-        .btn-location:hover {
-            background: #16a34a;
-        }
+        .btn-location:hover { background: #16a34a; }
+        .location-status { margin-top:8px; padding:9px 11px; border-radius:8px; background:#0f172a; color:#bfdbfe; }
+        .location-status.success { background:#064e3b; color:#d1fae5; }
+        .location-status.error { background:#7f1d1d; color:#fee2e2; }
 
         .btn-primary {
             background: #38bdf8;
@@ -245,6 +246,7 @@
             }
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="navbar">
@@ -318,10 +320,10 @@
                             required
                             disabled
                         >
-                        <button type="button" id="share-location-btn" class="btn-location" disabled>
+                        <button type="button" id="share-location-btn" class="btn-location">
                             Compartir mi ubicacion
                         </button>
-                        <p class="hint">Puedes escribir direccion normal y/o marcar en el mapa.</p>
+                        <p id="location-status" class="location-status" role="status" aria-live="polite">Puedes escribir la direccion o usar la ubicacion del dispositivo.</p>
                     </div>
 
                     <div class="form-group">
@@ -364,12 +366,12 @@
             <h2 class="title">Paso 4: Mapa del municipio</h2>
             <div id="map"></div>
             <div id="map-placeholder" class="hint">
-                Selecciona primero departamento y municipio para cargar el mapa.
+                Comparte tu ubicacion para abrir el mapa automaticamente o selecciona departamento y municipio.
             </div>
             <div class="map-info" id="map-info">
                 <p><strong>Recogida:</strong> <span id="origin-display">No seleccionado</span></p>
                 <p><strong>Llegada:</strong> <span id="destination-display">No seleccionado</span></p>
-                <p>Haz clic primero para recogida y luego para llegada.</p>
+                <p id="map-action-status"><strong>Instruccion:</strong> comparte tu ubicacion y luego toca en el mapa el lugar a donde quieres ir.</p>
             </div>
         </div>
     </div>
@@ -387,6 +389,7 @@
         const originInput = document.getElementById('origin');
         const destinationInput = document.getElementById('destination');
         const shareLocationBtn = document.getElementById('share-location-btn');
+        const locationStatus = document.getElementById('location-status');
 
         let departments = [];
         let municipalitiesByDepartment = {};
@@ -486,8 +489,44 @@
         function enableAddressInputs(enabled) {
             originInput.disabled = !enabled;
             destinationInput.disabled = !enabled;
-            shareLocationBtn.disabled = !enabled;
         }
+
+        function normalizePlace(value) {
+            return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        }
+
+        function ensureMap(lat, lng, zoom = 13) {
+            if (typeof L === 'undefined') {
+                locationStatus.textContent = 'No se pudo cargar el mapa, pero conservaremos las coordenadas GPS.';
+                locationStatus.classList.add('error');
+                return false;
+            }
+            mapElement.style.display = 'block';
+            mapInfo.style.display = 'block';
+            mapPlaceholder.style.display = 'none';
+            if (!map) {
+                map = L.map('map').setView([lat, lng], zoom);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: 'OpenStreetMap contributors', maxZoom: 19
+                }).addTo(map);
+                map.on('click', function(e) {
+                    if (selectionMode === 'origin') {
+                        setOrigin(e.latlng.lat, e.latlng.lng);
+                        selectionMode = 'destination';
+                        document.getElementById('map-action-status').textContent = 'Ahora toca en el mapa el lugar a donde quieres ir.';
+                    } else {
+                        setDestination(e.latlng.lat, e.latlng.lng);
+
+                        document.getElementById('map-action-status').textContent = 'Destino marcado. Puedes tocar otro punto para cambiarlo.';
+                    }
+                });
+            } else {
+                map.setView([lat, lng], zoom);
+                map.invalidateSize();
+            }
+            return true;
+        }
+
 
         async function getMunicipalityCenter(municipality, department) {
             const query = encodeURIComponent(`${municipality}, ${department}, Colombia`);
@@ -523,87 +562,64 @@
                 return;
             }
 
-            mapElement.style.display = 'block';
-            mapInfo.style.display = 'block';
-            mapPlaceholder.style.display = 'none';
             enableAddressInputs(true);
-
-            if (!map) {
-                map = L.map('map').setView([center.lat, center.lng], 13);
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: 'OpenStreetMap contributors',
-                    maxZoom: 19,
-                }).addTo(map);
-
-                map.on('click', function(e) {
-                    const lat = e.latlng.lat;
-                    const lng = e.latlng.lng;
-
-                    if (selectionMode === 'origin') {
-                        setOrigin(lat, lng);
-                        selectionMode = 'destination';
-                    } else {
-                        setDestination(lat, lng);
-                    }
-                });
-            } else {
-                map.setView([center.lat, center.lng], 13);
-                map.invalidateSize();
-            }
+            ensureMap(center.lat, center.lng, 13);
         }
 
         function setOrigin(lat, lng) {
-            if (!map) {
-                return;
-            }
-
-            if (originMarker) {
-                map.removeLayer(originMarker);
-            }
-
-            originMarker = L.marker([lat, lng]).addTo(map);
-
             document.getElementById('origin_lat').value = lat.toFixed(6);
             document.getElementById('origin_lng').value = lng.toFixed(6);
             document.getElementById('origin-display').textContent = lat.toFixed(4) + ', ' + lng.toFixed(4);
 
-            if (!originInput.value.trim()) {
-                originInput.value = 'Referencia ' + lat.toFixed(4) + ', ' + lng.toFixed(4);
+            if (!originInput.value.trim() || originInput.value.startsWith('Ubicacion actual:')) {
+                originInput.value = 'Ubicacion actual: ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
             }
+
+            if (!map || typeof L === 'undefined') return;
+            if (originMarker) map.removeLayer(originMarker);
+            originMarker = L.marker([lat, lng]).addTo(map).bindPopup('Tu ubicacion').openPopup();
         }
 
         function shareCurrentLocation() {
+            locationStatus.className = 'location-status';
+            if (!window.isSecureContext) {
+                locationStatus.textContent = 'La ubicacion requiere HTTPS. En este equipo usa http://127.0.0.1:8000.';
+                locationStatus.classList.add('error');
+                return;
+            }
             if (!navigator.geolocation) {
-                alert('Tu navegador no permite geolocalizacion.');
+                locationStatus.textContent = 'Este navegador no ofrece geolocalizacion.';
+                locationStatus.classList.add('error');
                 return;
             }
 
             shareLocationBtn.disabled = true;
-            shareLocationBtn.textContent = 'Ubicando...';
+            shareLocationBtn.textContent = 'Buscando ubicacion...';
+            locationStatus.textContent = 'Esperando la ubicacion del dispositivo. Acepta el permiso del navegador.';
 
             navigator.geolocation.getCurrentPosition(function(position) {
                 const lat = position.coords.latitude;
                 const lng = position.coords.longitude;
-
-                if (map) {
-                    map.setView([lat, lng], 16);
-                }
-
+                ensureMap(lat, lng, 16);
                 setOrigin(lat, lng);
+                enableAddressInputs(true);
                 selectionMode = 'destination';
-
+                document.getElementById('map-action-status').textContent = 'Tu ubicacion esta marcada. Ahora toca en el mapa el lugar a donde quieres ir.';
+                locationStatus.textContent = 'Ubicacion compartida correctamente. Precision aproximada: ' + Math.round(position.coords.accuracy) + ' metros. Selecciona el departamento y municipio si aun no lo hiciste.';
+                locationStatus.classList.add('success');
                 shareLocationBtn.disabled = false;
-                shareLocationBtn.textContent = 'Compartir mi ubicacion';
-            }, function() {
-                alert('No fue posible obtener tu ubicacion. Verifica permisos del navegador.');
+                shareLocationBtn.textContent = 'Actualizar mi ubicacion';
+            }, function(error) {
+                const messages = {
+                    1: 'Permiso de ubicacion bloqueado. Pulsa el candado junto a la direccion, permite Ubicacion y vuelve a intentar.',
+                    2: 'El dispositivo no pudo determinar la ubicacion. Activa GPS o Wi-Fi y vuelve a intentar.',
+                    3: 'La ubicacion tardo demasiado. Acercate a una ventana o activa el GPS y vuelve a intentar.'
+                };
+                locationStatus.textContent = messages[error.code] || 'No fue posible obtener tu ubicacion.';
+                locationStatus.classList.add('error');
                 shareLocationBtn.disabled = false;
-                shareLocationBtn.textContent = 'Compartir mi ubicacion';
-            }, {
-                enableHighAccuracy: true,
-                timeout: 12000,
-                maximumAge: 0
-            });
+                shareLocationBtn.textContent = 'Reintentar ubicacion';
+            }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
         }
 
         function setDestination(lat, lng) {
@@ -615,7 +631,7 @@
                 map.removeLayer(destinationMarker);
             }
 
-            destinationMarker = L.marker([lat, lng]).addTo(map);
+            destinationMarker = L.marker([lat, lng]).addTo(map).bindPopup('Destino').openPopup();
 
             document.getElementById('destination_lat').value = lat.toFixed(6);
             document.getElementById('destination_lng').value = lng.toFixed(6);
@@ -674,6 +690,9 @@
                 return;
             }
 
+            enableAddressInputs(true);
+            locationStatus.textContent = 'Puedes escribir la direccion o usar la ubicacion del dispositivo.';
+            locationStatus.className = 'location-status';
             await initOrMoveMap(departmentSelect.value, this.value);
         });
 
@@ -688,6 +707,7 @@
                 await initOrMoveMap(oldDepartment, oldMunicipality);
             } else {
                 enableAddressInputs(false);
+                shareLocationBtn.disabled = false;
             }
 
             if (oldOriginLat && oldOriginLng) {
@@ -699,5 +719,6 @@
             }
         });
     </script>
+    @include('partials.pwa-script')
 </body>
 </html>

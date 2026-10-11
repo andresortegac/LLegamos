@@ -207,11 +207,15 @@
             font-weight: bold;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="container">
         <div class="navbar">
             <h3>Llegamos - Panel de Conductor</h3>
+            <a href="{{ route('notifications.index') }}" style="color:#7dd3fc;">Notificaciones</a>
+            <a href="{{ route('safety.contacts') }}" style="color:#7dd3fc;">Contactos SOS</a>
+            <a href="{{ route('payouts.driver') }}" style="color:#7dd3fc;">Retiros</a>
             <form method="POST" action="{{ route('logout') }}" style="display: inline;">
                 @csrf
                 <button type="submit" class="logout-btn">Cerrar sesion</button>
@@ -221,6 +225,13 @@
         <div class="welcome-section">
             <h2>Bienvenido, {{ $user['name'] }}!</h2>
             <p>Tipo de usuario: <strong>Conductor</strong></p>
+
+            @if(session('success'))
+                <div class="status-panel"><p>{{ session('success') }}</p></div>
+            @endif
+            @if(session('error'))
+                <div class="status-panel"><p><strong>{{ session('error') }}</strong></p></div>
+            @endif
 
             @if($canOperate)
                 <div class="status-badge">Cuenta activa</div>
@@ -259,11 +270,25 @@
                 </a>
             </div>
         @else
+            <h3 class="section-title">Disponibilidad</h3>
+            <div class="status-panel">
+                <p>Estado: <strong>{{ $profile->is_online ? 'EN LINEA' : 'FUERA DE LINEA' }}</strong></p>
+                <p id="location-status">{{ $profile->is_online ? 'Tu ubicacion esta activa.' : 'Conectate para recibir viajes cercanos.' }}</p>
+                <form method="POST" action="{{ route('driver.availability') }}" id="availability-form">
+                    @csrf
+                    <input type="hidden" name="is_online" value="{{ $profile->is_online ? 0 : 1 }}">
+                    <input type="hidden" name="latitude" id="driver-latitude">
+                    <input type="hidden" name="longitude" id="driver-longitude">
+                    <button class="btn {{ $profile->is_online ? 'btn-secondary' : '' }}" type="submit">
+                        {{ $profile->is_online ? 'Desconectarme' : 'Conectarme y compartir ubicacion' }}
+                    </button>
+                </form>
+            </div>
             <h3 class="section-title">Estadisticas</h3>
             <div class="stats-grid">
                 <div class="stat-card">
                     <h4>Viajes completados</h4>
-                    <div class="stat-value">0</div>
+                    <div class="stat-value">{{ $completedTrips ?? 0 }}</div>
                 </div>
                 <div class="stat-card">
                     <h4>Ingresos hoy</h4>
@@ -329,9 +354,68 @@
 
             <h3 class="section-title">Viaje activo</h3>
             <div class="empty-state">
-                <p>No tienes viajes activos en este momento.</p>
+                @if($activeTrip)
+                    <p>Tienes el viaje #{{ $activeTrip->id }} en estado {{ $activeTrip->status }}.</p>
+                    <a href="{{ route('trip.show', $activeTrip->id) }}" style="text-decoration: none;">
+                        <button class="btn" type="button">Continuar viaje</button>
+                    </a>
+                @else
+                    <p>No tienes viajes activos en este momento.</p>
+                @endif
             </div>
         @endif
     </div>
+    @if($canOperate && !$profile->is_online)
+    <script>
+        document.getElementById('availability-form').addEventListener('submit', function (event) {
+            if (document.querySelector('[name="is_online"]').value !== '1') return;
+            event.preventDefault();
+            const status = document.getElementById('location-status');
+            status.textContent = 'Obteniendo ubicacion...';
+            navigator.geolocation.getCurrentPosition((position) => {
+                document.getElementById('driver-latitude').value = position.coords.latitude;
+                document.getElementById('driver-longitude').value = position.coords.longitude;
+                event.target.submit();
+            }, () => {
+                status.textContent = 'Debes permitir la ubicacion para conectarte.';
+            }, { enableHighAccuracy: true, timeout: 10000 });
+        });
+    </script>
+    @endif    @if($canOperate && $profile->is_online)
+    <script>
+        let lastLocationSentAt = 0;
+        navigator.geolocation.watchPosition(async (position) => {
+            const now = Date.now();
+            if (now - lastLocationSentAt < 5000) return;
+            lastLocationSentAt = now;
+
+            try {
+                const response = await fetch('{{ route('driver.location') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy,
+                        heading: position.coords.heading,
+                        speed: position.coords.speed
+                    })
+                });
+                if (response.ok) {
+                    const precision = Math.round(position.coords.accuracy || 0);
+                    document.getElementById('location-status').textContent = 'Ubicacion en vivo activa' + (precision ? ' (precision aproximada: ' + precision + ' m).' : '.');
+                }
+            } catch (error) {
+                document.getElementById('location-status').textContent = 'No fue posible actualizar la ubicacion.';
+            }
+        }, () => {
+            document.getElementById('location-status').textContent = 'Permite la ubicacion para seguir recibiendo viajes.';
+        }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 12000 });
+    </script>
+    @endif    @include('partials.pwa-script')
 </body>
 </html>

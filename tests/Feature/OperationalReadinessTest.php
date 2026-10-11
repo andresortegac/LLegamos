@@ -1,0 +1,3 @@
+<?php
+namespace Tests\Feature;use Illuminate\Foundation\Testing\RefreshDatabase;use Tests\TestCase;
+class OperationalReadinessTest extends TestCase{use RefreshDatabase;public function test_readiness_checks_dependencies_without_leaking_errors():void{$this->get(route('health.ready'))->assertOk()->assertJsonStructure(['status','time'])->assertJson(['status'=>'ready']);}public function test_web_responses_include_security_headers():void{$r=$this->get('/');$r->assertSuccessful();$r->assertHeader('X-Content-Type-Options','nosniff')->assertHeader('X-Frame-Options','SAMEORIGIN')->assertHeader('Referrer-Policy','strict-origin-when-cross-origin');$this->assertStringContainsString("object-src 'none'",(string)$r->headers->get('Content-Security-Policy'));}}

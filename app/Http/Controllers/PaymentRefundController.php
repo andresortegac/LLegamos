@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Controllers;use App\Models\Payment;use App\Services\WompiRefundService;use Illuminate\Http\Request;
+class PaymentRefundController extends Controller{public function store(Request $request,Payment $payment,WompiRefundService $refunds){$d=$request->validate(['amount'=>'required|numeric|min:1','reason'=>'required|string|min:5|max:500']);try{$refunds->request($payment,(int)round(((float)$d['amount'])*100),trim($d['reason']),$request->user()->id);return back()->with('success','Solicitud de reembolso enviada.');}catch(\DomainException|\RuntimeException $e){return back()->with('error',$e->getMessage());}}
+}

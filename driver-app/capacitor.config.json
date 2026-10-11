@@ -1,0 +1,7 @@
+{
+  "appId": "co.llegamos.conductor",
+  "appName": "Llegamos Conductor",
+  "webDir": "dist",
+  "android": { "useLegacyBridge": true },
+  "server": { "androidScheme": "https", "cleartext": true }
+}

@@ -220,6 +220,7 @@
             }
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="navbar">
@@ -285,6 +286,15 @@
                                     ⊘ Cancelado
                                 @endif
                             </span>
+                            @if($payment->status === 'completed' && $payment->provider === 'wompi')
+                                <form method="POST" action="{{ route('payment.refund', $payment) }}" style="margin-top:8px">@csrf<input name="amount" type="number" min="1" max="{{ $payment->amount }}" step="0.01" value="{{ $payment->amount }}" required style="width:90px"><input name="reason" placeholder="Motivo" minlength="5" required style="width:120px"><button type="submit">Reembolsar</button></form>
+                            @endif
+                            @if($payment->status === 'pending')
+                                <form method="POST" action="{{ route('payment.reconcile', $payment->id) }}" style="margin-top:8px;">
+                                    @csrf
+                                    <button type="submit" style="padding:6px 10px; border:0; border-radius:6px; background:#10b981; color:white; cursor:pointer;">Conciliar efectivo</button>
+                                </form>
+                            @endif
                         </div>
                     </div>
                 @endforeach
@@ -296,5 +306,6 @@
             </div>
         @endif
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

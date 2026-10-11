@@ -199,6 +199,7 @@
             background: #0ea5e9;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="navbar">
@@ -293,5 +294,6 @@
             </div>
         @endif
     </div>
+    @include('partials.pwa-script')
 </body>
 </html>

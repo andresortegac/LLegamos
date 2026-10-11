@@ -1,0 +1,3 @@
+<?php
+namespace App\Models;use Illuminate\Database\Eloquent\Model;
+class PaymentRefund extends Model{protected $fillable=['payment_id','requested_by','amount_in_cents','reason','reference','provider_refund_id','status','provider_response','processed_at'];protected $hidden=['provider_response'];protected function casts():array{return ['provider_response'=>'encrypted:array','processed_at'=>'datetime'];}public function payment(){return $this->belongsTo(Payment::class);}public function requester(){return $this->belongsTo(User::class,'requested_by');}}

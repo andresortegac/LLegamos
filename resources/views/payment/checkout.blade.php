@@ -194,6 +194,7 @@
             margin-bottom: 20px;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="container">
@@ -230,58 +231,27 @@
                 </div>
             </div>
 
-            <!-- Payment Methods -->
+            <!-- Payment method: cash only until a certified gateway is configured. -->
             <form method="POST" action="{{ route('payment.process', $trip->id) }}" id="paymentForm">
                 @csrf
+                <input type="hidden" name="payment_method" value="cash">
 
                 <div class="payment-section">
-                    <div class="section-title">Método de Pago</div>
-                    <div class="payment-methods">
-                        <label class="method active" onclick="selectMethod('card', this)">
-                            <input type="radio" name="payment_method" value="card" checked hidden>
-                            <div>💳</div>
-                            <div>Tarjeta</div>
-                        </label>
-                        <label class="method" onclick="selectMethod('cash', this)">
-                            <input type="radio" name="payment_method" value="cash" hidden>
-                            <div>💵</div>
-                            <div>Efectivo</div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Card Details (Initially visible) -->
-                <div id="cardDetails" class="payment-section">
-                    <div class="section-title">Información de la Tarjeta</div>
-                    
-                    <div style="margin-bottom: 15px;">
-                        <input type="text" placeholder="Nombre del titular" 
-                               class="input-field" required maxlength="50" style="width: 100%; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: white;">
-                    </div>
-
-                    <div style="margin-bottom: 15px;">
-                        <input type="text" placeholder="Número de tarjeta (16 dígitos)" 
-                               class="input-field" pattern="[0-9]{16}" maxlength="16" required style="width: 100%; padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: white;">
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
-                        <input type="text" placeholder="MM/AA" class="input-field" pattern="[0-9]{2}/[0-9]{2}" 
-                               maxlength="5" required style="padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: white;">
-                        <input type="text" placeholder="CVV (3 dígitos)" class="input-field" pattern="[0-9]{3}" 
-                               maxlength="3" required style="padding: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: white;">
-                    </div>
-                </div>
-
-                <!-- Cash Payment Info (Hidden) -->
-                <div id="cashDetails" class="payment-section" style="display: none;">
+                    <div class="section-title">Pago en efectivo</div>
                     <div style="background: rgba(251, 146, 60, 0.1); border: 1px solid rgba(251, 146, 60, 0.3); padding: 15px; border-radius: 8px; color: #fed7aa; font-size: 13px;">
-                        <p>💵 Debes pagar ${{"$ " . number_format($trip->final_cost ?? $trip->estimated_cost, 2)}} en efectivo al conductor.</p>
-                        <p style="margin-top: 10px;">Confirma el pago después de completar el viaje.</p>
+                        <p>Entrega al conductor el valor indicado. El registro quedara pendiente de conciliacion.</p>
+                        <p style="margin-top: 10px;">El pago con tarjeta se habilitara unicamente mediante una pasarela certificada; Llegamos no captura datos de tarjeta.</p>
                     </div>
                 </div>
 
-                <button type="submit" class="pay-button">✓ Confirmar Pago</button>
+                <button type="submit" class="pay-button">Registrar pago en efectivo</button>
             </form>
+
+            @if($wompiEnabled)
+            <form method="POST" action="{{ route('payment.wompi', $trip->id) }}" style="margin-top:16px">@csrf<button type="submit" class="pay-button" style="background:#22c55e">Pagar en linea con Wompi</button></form>
+            @else
+            <div style="margin-top:16px;color:#94a3b8;font-size:13px">Pago electronico pendiente de credenciales comerciales Wompi.</div>
+            @endif
 
             <!-- Security Info -->
             <div class="security-info">
@@ -293,62 +263,7 @@
         </div>
     </div>
 
-    <script>
-        function selectMethod(method, element) {
-            // Remove active class from all methods
-            document.querySelectorAll('.method').forEach(m => m.classList.remove('active'));
-            
-            // Add active class to clicked method
-            element.classList.add('active');
-            element.querySelector('input[type="radio"]').checked = true;
 
-            // Show/hide card details
-            if (method === 'card') {
-                document.getElementById('cardDetails').style.display = 'block';
-                document.getElementById('cashDetails').style.display = 'none';
-            } else {
-                document.getElementById('cardDetails').style.display = 'none';
-                document.getElementById('cashDetails').style.display = 'block';
-            }
-        }
-
-        // Auto-format card number input
-        document.querySelectorAll('input[pattern="[0-9]{16}"]').forEach(input => {
-            input.addEventListener('input', function(e) {
-                let value = e.target.value.replace(/\s/g, '');
-                if (value.length > 0) {
-                    value = value.match(/.{1,4}/g).join(' ');
-                }
-                e.target.value = value;
-            });
-        });
-
-        // Auto-format MM/AA
-        document.querySelectorAll('input[pattern="[0-9]{2}/[0-9]{2}"]').forEach(input => {
-            input.addEventListener('input', function(e) {
-                let value = e.target.value.replace(/\D/g, '');
-                if (value.length >= 2) {
-                    value = value.substring(0, 2) + '/' + value.substring(2, 4);
-                }
-                e.target.value = value;
-            });
-        });
-
-        // Handle form submission
-        document.getElementById('paymentForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const method = document.querySelector('input[name="payment_method"]:checked').value;
-            
-            if (method === 'card') {
-                // For demo, just submit
-                // In production, you'd integrate with Stripe
-                this.submit();
-            } else {
-                // Cash payment - just submit
-                this.submit();
-            }
-        });
-    </script>
+    @include('partials.pwa-script')
 </body>
 </html>

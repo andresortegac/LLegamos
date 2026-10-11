@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -188,6 +188,7 @@
             color: #422006;
         }
     </style>
+    @include('partials.pwa-head')
 </head>
 <body>
     <div class="box">
@@ -217,7 +218,6 @@
                     <option value="">Selecciona una opcion</option>
                     <option value="pasajero" {{ old('role') == 'pasajero' ? 'selected' : '' }}>Pasajero</option>
                     <option value="conductor" {{ old('role') == 'conductor' ? 'selected' : '' }}>Conductor</option>
-                    <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>Administrador</option>
                 </select>
             </div>
 
@@ -256,7 +256,7 @@
 
             <div class="form-group">
                 <label for="password">Contrasena</label>
-                <input type="password" name="password" id="password" required>
+                <input type="password" name="password" id="password" minlength="8" required>
             </div>
 
             <div class="form-group">
@@ -376,6 +376,7 @@
         window.addEventListener('beforeunload', stopCamera);
         document.addEventListener('DOMContentLoaded', updateSecurityFields);
     </script>
+    @include('partials.pwa-script')
 </body>
 </html>
 

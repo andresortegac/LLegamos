@@ -1,0 +1,3 @@
+<?php
+namespace App\Http\Controllers;use Illuminate\Support\Facades\Cache;use Illuminate\Support\Facades\DB;use Illuminate\Support\Facades\Storage;
+class HealthController extends Controller{public function ready(){try{DB::select('select 1');$key='health:'.bin2hex(random_bytes(6));Cache::put($key,'ok',10);if(Cache::pull($key)!=='ok')throw new \RuntimeException('cache');$probe='health/'.bin2hex(random_bytes(6));$disk=Storage::disk(config('filesystems.private'));$disk->put($probe,'ok');$disk->delete($probe);return response()->json(['status'=>'ready','time'=>now()->toIso8601String()]);}catch(\Throwable $e){report($e);return response()->json(['status'=>'unavailable'],503);}}}
